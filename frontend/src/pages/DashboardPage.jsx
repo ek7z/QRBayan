@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { memo, useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import useAuthStore from "../store/useAuthStore";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { getQrCodeStyling } from "../utils/qrCodeStylingLoader";
 import {
   QrCode,
   Upload,
@@ -29,7 +30,6 @@ import {
   UserPlus,
   LogIn,
 } from "lucide-react";
-import QRCodeStyling from "qr-code-styling";
 
 const defaultFrameSettings = {
   qrX: 19,
@@ -49,6 +49,13 @@ const defaultFrameSettings = {
   fontFamily: "Trebuchet MS",
   fontWeight: 700,
 };
+
+const INITIAL_FRAME_CARD_COUNT = 6;
+const FRAME_CARD_BATCH_SIZE = 4;
+const MAX_STYLED_QR_CACHE_ENTRIES = 48;
+const styledQrObjectUrlCache = new Map();
+const cachedFrameImages = new Set();
+const frameImageLoadPromises = new Map();
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -135,6 +142,93 @@ const createQrCodeOptions = ({ payload, size, settings }) => ({
     color: settings.qrBackground,
   },
 });
+
+const getStyledQrCacheKey = ({ payload, size, settings }) =>
+  JSON.stringify({
+    payload,
+    size,
+    qrForeground: settings.qrForeground,
+    qrBackground: settings.qrBackground,
+    qrDotStyle: settings.qrDotStyle,
+    qrCornerSquareStyle: settings.qrCornerSquareStyle,
+    qrCornerDotStyle: settings.qrCornerDotStyle,
+    qrShape: settings.qrShape,
+  });
+
+const rememberStyledQrObjectUrl = (key, objectUrl) => {
+  if (styledQrObjectUrlCache.has(key)) {
+    styledQrObjectUrlCache.delete(key);
+  }
+
+  styledQrObjectUrlCache.set(key, objectUrl);
+
+  if (styledQrObjectUrlCache.size > MAX_STYLED_QR_CACHE_ENTRIES) {
+    const oldestKey = styledQrObjectUrlCache.keys().next().value;
+    const oldestObjectUrl = styledQrObjectUrlCache.get(oldestKey);
+    styledQrObjectUrlCache.delete(oldestKey);
+
+    if (oldestObjectUrl) {
+      URL.revokeObjectURL(oldestObjectUrl);
+    }
+  }
+};
+
+const getCachedStyledQrObjectUrl = async ({ payload, size, settings }) => {
+  const cacheKey = getStyledQrCacheKey({ payload, size, settings });
+
+  if (styledQrObjectUrlCache.has(cacheKey)) {
+    return styledQrObjectUrlCache.get(cacheKey);
+  }
+
+  const QRCodeStyling = await getQrCodeStyling();
+  const qrCode = new QRCodeStyling(
+    createQrCodeOptions({
+      payload,
+      size,
+      settings,
+    }),
+  );
+  const qrBlob = await qrCode.getRawData("png");
+
+  if (!(qrBlob instanceof Blob)) {
+    throw new Error("Unable to prepare the QR preview.");
+  }
+
+  const objectUrl = URL.createObjectURL(qrBlob);
+  rememberStyledQrObjectUrl(cacheKey, objectUrl);
+  return objectUrl;
+};
+
+const preloadFrameImage = (src) => {
+  if (!src || cachedFrameImages.has(src)) {
+    return Promise.resolve();
+  }
+
+  if (frameImageLoadPromises.has(src)) {
+    return frameImageLoadPromises.get(src);
+  }
+
+  const imageLoadPromise = new Promise((resolve, reject) => {
+    const image = new Image();
+
+    image.onload = () => {
+      cachedFrameImages.add(src);
+      frameImageLoadPromises.delete(src);
+      resolve();
+    };
+
+    image.onerror = (error) => {
+      frameImageLoadPromises.delete(src);
+      reject(error);
+    };
+
+    image.decoding = "async";
+    image.src = src;
+  });
+
+  frameImageLoadPromises.set(src, imageLoadPromise);
+  return imageLoadPromise;
+};
 
 const blobToImage = (blob) =>
   new Promise((resolve, reject) => {
@@ -472,6 +566,99 @@ const loadImage = (src) =>
     image.src = src;
   });
 
+const LazyFrameArtwork = ({ src, alt, eager = false }) => {
+  const containerRef = useRef(null);
+  const [shouldLoad, setShouldLoad] = useState(eager);
+  const [loaded, setLoaded] = useState(() => cachedFrameImages.has(src));
+
+  useEffect(() => {
+    if (eager || shouldLoad || !containerRef.current) {
+      return undefined;
+    }
+
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoad(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      {
+        rootMargin: "240px",
+      },
+    );
+
+    observer.observe(containerRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [eager, shouldLoad]);
+
+  useEffect(() => {
+    if (!shouldLoad) {
+      setLoaded(cachedFrameImages.has(src));
+    }
+  }, [shouldLoad, src]);
+
+  useEffect(() => {
+    if (!shouldLoad || !src) {
+      return undefined;
+    }
+
+    if (cachedFrameImages.has(src)) {
+      setLoaded(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    preloadFrameImage(src)
+      .then(() => {
+        if (!cancelled) {
+          setLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoaded(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldLoad, src]);
+
+  return (
+    <div ref={containerRef} className="absolute inset-0">
+      {!loaded && (
+        <div className="absolute inset-0 animate-pulse bg-slate-800/80" />
+      )}
+      {shouldLoad && (
+        <img
+          src={src}
+          alt={alt}
+          className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-200 ${
+            loaded ? "opacity-100" : "opacity-0"
+          }`}
+          loading={eager ? "eager" : "lazy"}
+          decoding="async"
+          onLoad={() => {
+            cachedFrameImages.add(src);
+            setLoaded(true);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
 const getFittedFrameFontSize = ({
   text,
   frameWidth,
@@ -534,17 +721,18 @@ const StyledQrCode = ({
     }
 
     let cancelled = false;
-    let objectUrl = "";
 
     const renderQrImage = async () => {
-      const qrCode = new QRCodeStyling(qrOptions);
-      const qrBlob = await qrCode.getRawData("png");
+      const objectUrl = await getCachedStyledQrObjectUrl({
+        payload,
+        size,
+        settings,
+      });
 
-      if (!(qrBlob instanceof Blob) || cancelled) {
+      if (cancelled) {
         return;
       }
 
-      objectUrl = URL.createObjectURL(qrBlob);
       setQrImageUrl(objectUrl);
     };
 
@@ -556,11 +744,8 @@ const StyledQrCode = ({
 
     return () => {
       cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
     };
-  }, [payload, qrOptions]);
+  }, [payload, qrOptions, settings, size]);
 
   if (!payload) {
     return (
@@ -609,6 +794,7 @@ const FramePreview = ({
   payload,
   name,
   settingsOverride,
+  deferArtwork = false,
   className = "",
   qrCanvasSize = 720,
   plainQrSize = 240,
@@ -747,10 +933,10 @@ const FramePreview = ({
       ref={previewRef}
       className={`relative h-full w-full overflow-hidden ${className}`}
     >
-      <img
+      <LazyFrameArtwork
         src={frame.src}
         alt={frame.name}
-        className="absolute inset-0 h-full w-full object-contain"
+        eager={!deferArtwork}
       />
 
       {payload && (
@@ -818,6 +1004,69 @@ const FramePreview = ({
   );
 };
 
+const FrameSelectionCard = memo(
+  ({
+    frame,
+    isActive,
+    generatedPayload,
+    customName,
+    frameSettings,
+    onSelect,
+  }) => (
+    <button
+      id={`frame-card-${frame.id}`}
+      type="button"
+      onClick={() => onSelect(frame.id)}
+      className={`w-[280px] shrink-0 snap-start overflow-hidden rounded-2xl border text-left transition-colors sm:w-[320px] ${
+        isActive
+          ? "border-pink-400 bg-pink-500/10"
+          : "border-slate-800 bg-slate-950/50 hover:border-slate-700"
+      }`}
+    >
+      <div className="aspect-square w-full border-b border-slate-800 bg-slate-900/80 p-3">
+        <FramePreview
+          frame={frame}
+          payload={frame.src ? "" : generatedPayload}
+          name={customName || "NAME"}
+          deferArtwork={Boolean(frame.src)}
+          settingsOverride={frame.src ? frameSettings || frame.settings : null}
+          className="rounded-2xl"
+          qrCanvasSize={256}
+          plainQrSize={150}
+          framedTextScale={0.36}
+        />
+      </div>
+
+      <div className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-white">{frame.name}</p>
+          {isActive && (
+            <span className="rounded-full bg-pink-500/15 px-2 py-0.5 text-xs font-medium text-pink-300">
+              Selected
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-xs text-slate-500">{frame.description}</p>
+      </div>
+    </button>
+  ),
+  (prevProps, nextProps) => {
+    if (prevProps.frame !== nextProps.frame) return false;
+    if (prevProps.isActive !== nextProps.isActive) return false;
+    if (prevProps.frameSettings !== nextProps.frameSettings) return false;
+
+    if (!prevProps.frame.src) {
+      return (
+        prevProps.generatedPayload === nextProps.generatedPayload &&
+        prevProps.customName === nextProps.customName &&
+        prevProps.onSelect === nextProps.onSelect
+      );
+    }
+
+    return prevProps.onSelect === nextProps.onSelect;
+  },
+);
+
 const DashboardPage = () => {
   const { user, updateUser } = useAuthStore();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -836,6 +1085,9 @@ const DashboardPage = () => {
   const [selectedFrameId, setSelectedFrameId] = useState("none");
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [activeEditorLayer, setActiveEditorLayer] = useState("qr");
+  const [visibleFrameCount, setVisibleFrameCount] = useState(
+    INITIAL_FRAME_CARD_COUNT,
+  );
   const [frameEditorSettings, setFrameEditorSettings] = useState(() =>
     Object.fromEntries(
       framePresets
@@ -852,43 +1104,126 @@ const DashboardPage = () => {
 
   const fileInputRef = useRef(null);
   const frameRailRef = useRef(null);
+  const queuedFrameSettingsRef = useRef({});
+  const latestFrameSettingsRef = useRef(frameEditorSettings);
+  const frameUpdateRafRef = useRef(null);
   const selectedFrame =
     framePresets.find((frame) => frame.id === selectedFrameId) ||
     framePresets[0];
+  const renderedFrames = framePresets.slice(
+    0,
+    Math.min(visibleFrameCount, framePresets.length),
+  );
+  const hasMoreFrames = visibleFrameCount < framePresets.length;
   const selectedFrameSettings = selectedFrame.src
-    ? frameEditorSettings[selectedFrame.id] || {
+    ? {
         ...defaultFrameSettings,
         ...(selectedFrame.settings || {}),
+        ...(frameEditorSettings[selectedFrame.id] || {}),
+        ...(queuedFrameSettingsRef.current[selectedFrame.id] || {}),
       }
     : defaultFrameSettings;
 
+  useEffect(() => {
+    latestFrameSettingsRef.current = frameEditorSettings;
+  }, [frameEditorSettings]);
+
+  const flushQueuedFrameEditorUpdates = () => {
+    const queuedUpdatesByFrame = queuedFrameSettingsRef.current;
+    frameUpdateRafRef.current = null;
+
+    if (!Object.keys(queuedUpdatesByFrame).length) {
+      return;
+    }
+
+    queuedFrameSettingsRef.current = {};
+
+    setFrameEditorSettings((current) => {
+      const nextSettings = { ...current };
+
+      Object.entries(queuedUpdatesByFrame).forEach(([frameId, updates]) => {
+        nextSettings[frameId] = {
+          ...(nextSettings[frameId] || defaultFrameSettings),
+          ...updates,
+        };
+      });
+
+      latestFrameSettingsRef.current = nextSettings;
+      return nextSettings;
+    });
+  };
+
   const updateSelectedFrameSettings = (updates) => {
     if (!selectedFrame.src) return;
+    const frameId = selectedFrame.id;
 
-    setFrameEditorSettings((current) => ({
-      ...current,
-      [selectedFrame.id]: {
-        ...(current[selectedFrame.id] || defaultFrameSettings),
+    queuedFrameSettingsRef.current = {
+      ...queuedFrameSettingsRef.current,
+      [frameId]: {
+        ...(queuedFrameSettingsRef.current[frameId] || {}),
         ...updates,
       },
-    }));
+    };
+
+    latestFrameSettingsRef.current = {
+      ...latestFrameSettingsRef.current,
+      [frameId]: {
+        ...(latestFrameSettingsRef.current[frameId] || defaultFrameSettings),
+        ...updates,
+      },
+    };
+
+    if (frameUpdateRafRef.current) {
+      return;
+    }
+
+    frameUpdateRafRef.current = requestAnimationFrame(
+      flushQueuedFrameEditorUpdates,
+    );
   };
 
   const resetSelectedFrameSettings = () => {
     if (!selectedFrame.src) return;
 
-    setFrameEditorSettings((current) => ({
-      ...current,
-      [selectedFrame.id]: {
-        ...defaultFrameSettings,
-        ...(selectedFrame.settings || {}),
-      },
-    }));
+    if (frameUpdateRafRef.current) {
+      cancelAnimationFrame(frameUpdateRafRef.current);
+      frameUpdateRafRef.current = null;
+    }
+
+    delete queuedFrameSettingsRef.current[selectedFrame.id];
+
+    setFrameEditorSettings((current) => {
+      const nextSettings = {
+        ...current,
+        [selectedFrame.id]: {
+          ...defaultFrameSettings,
+          ...(selectedFrame.settings || {}),
+        },
+      };
+
+      latestFrameSettingsRef.current = nextSettings;
+      return nextSettings;
+    });
     setActiveEditorLayer("qr");
   };
 
+  useEffect(
+    () => () => {
+      if (frameUpdateRafRef.current) {
+        cancelAnimationFrame(frameUpdateRafRef.current);
+      }
+    },
+    [],
+  );
+
   const scrollFrameRail = (direction) => {
     if (!frameRailRef.current) return;
+
+    if (direction > 0 && hasMoreFrames) {
+      setVisibleFrameCount((current) =>
+        Math.min(current + FRAME_CARD_BATCH_SIZE, framePresets.length),
+      );
+    }
 
     frameRailRef.current.scrollBy({
       left: direction * 320,
@@ -896,17 +1231,68 @@ const DashboardPage = () => {
     });
   };
 
-  const handleFrameSelect = (frameId) => {
+  const loadMoreFrames = () => {
+    setVisibleFrameCount((current) =>
+      Math.min(current + FRAME_CARD_BATCH_SIZE, framePresets.length),
+    );
+  };
+
+  const handleFrameSelect = useCallback((frameId) => {
+    if (frameUpdateRafRef.current) {
+      cancelAnimationFrame(frameUpdateRafRef.current);
+      flushQueuedFrameEditorUpdates();
+    }
+
+    const frameIndex = framePresets.findIndex((frame) => frame.id === frameId);
+
+    if (frameIndex >= visibleFrameCount) {
+      setVisibleFrameCount(
+        Math.min(frameIndex + 1, framePresets.length),
+      );
+    }
+
     setSelectedFrameId(frameId);
     setActiveEditorLayer("qr");
 
-    const frameElement = document.getElementById(`frame-card-${frameId}`);
-    frameElement?.scrollIntoView({
-      behavior: "smooth",
-      inline: "center",
-      block: "nearest",
+    requestAnimationFrame(() => {
+      const frameElement = document.getElementById(`frame-card-${frameId}`);
+      frameElement?.scrollIntoView({
+        behavior: "smooth",
+        inline: "center",
+        block: "nearest",
+      });
     });
+  }, [visibleFrameCount]);
+
+  const handleFrameRailScroll = () => {
+    if (!frameRailRef.current || !hasMoreFrames) return;
+
+    const { scrollLeft, clientWidth, scrollWidth } = frameRailRef.current;
+    const remainingScroll = scrollWidth - (scrollLeft + clientWidth);
+
+    if (remainingScroll <= 480) {
+      loadMoreFrames();
+    }
   };
+
+  useEffect(() => {
+    const selectedFrameIndex = renderedFrames.findIndex(
+      (frame) => frame.id === selectedFrameId,
+    );
+
+    const warmFrameIndexes =
+      selectedFrameIndex >= 0
+        ? [selectedFrameIndex, selectedFrameIndex + 1, selectedFrameIndex + 2]
+        : [0, 1, 2];
+
+    warmFrameIndexes.forEach((frameIndex) => {
+      const frame = renderedFrames[frameIndex];
+
+      if (frame?.src) {
+        preloadFrameImage(frame.src).catch(() => {});
+      }
+    });
+  }, [renderedFrames, selectedFrameId]);
 
   const requireLogin = (title, description) => {
     setAuthPrompt({ title, description });
@@ -1017,6 +1403,7 @@ const DashboardPage = () => {
       setDownloadLoading(true);
       setError("");
 
+      const QRCodeStyling = await getQrCodeStyling();
       const qrCode = new QRCodeStyling(
         createQrCodeOptions({
           payload: generatedPayload,
@@ -1393,59 +1780,38 @@ const DashboardPage = () => {
 
         <div
           ref={frameRailRef}
+          onScroll={handleFrameRailScroll}
           className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3"
         >
-          {framePresets.map((frame) => {
+          {renderedFrames.map((frame) => {
             const isActive = selectedFrameId === frame.id;
 
             return (
-              <button
-                id={`frame-card-${frame.id}`}
+              <FrameSelectionCard
                 key={frame.id}
-                type="button"
-                onClick={() => handleFrameSelect(frame.id)}
-                className={`w-[280px] shrink-0 snap-start overflow-hidden rounded-2xl border text-left transition-colors sm:w-[320px] ${
-                  isActive
-                    ? "border-pink-400 bg-pink-500/10"
-                    : "border-slate-800 bg-slate-950/50 hover:border-slate-700"
-                }`}
-              >
-                <div className="aspect-square w-full border-b border-slate-800 bg-slate-900/80 p-3">
-                  <FramePreview
-                    frame={frame}
-                    payload={frame.src ? "" : generatedPayload}
-                    name={customName || "NAME"}
-                    settingsOverride={
-                      frame.src
-                        ? frameEditorSettings[frame.id] || frame.settings
-                        : null
-                    }
-                    className="rounded-2xl"
-                    qrCanvasSize={256}
-                    plainQrSize={150}
-                    framedTextScale={0.36}
-                  />
-                </div>
-
-                <div className="p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">
-                      {frame.name}
-                    </p>
-                    {isActive && (
-                      <span className="rounded-full bg-pink-500/15 px-2 py-0.5 text-xs font-medium text-pink-300">
-                        Selected
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {frame.description}
-                  </p>
-                </div>
-              </button>
+                frame={frame}
+                isActive={isActive}
+                generatedPayload={generatedPayload}
+                customName={customName}
+                frameSettings={frame.src ? frameEditorSettings[frame.id] : null}
+                onSelect={handleFrameSelect}
+              />
             );
           })}
         </div>
+
+        {hasMoreFrames && (
+          <div className="mt-4 flex justify-center">
+            <button
+              type="button"
+              onClick={loadMoreFrames}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-950/60 px-4 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:border-slate-600 hover:text-white"
+            >
+              Load more designs
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {generatedPayload && !selectedFrame.src && (
           <button

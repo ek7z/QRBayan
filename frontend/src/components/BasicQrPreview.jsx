@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { generateQrBlob } from "../utils/qrImage";
+import { getCachedQrObjectUrl } from "../utils/qrImage";
 
 const BasicQrPreview = ({
   value,
@@ -16,16 +16,11 @@ const BasicQrPreview = ({
     }
 
     let cancelled = false;
-    let objectUrl = "";
 
     const renderQr = async () => {
-      const blob = await generateQrBlob(value, Math.max(size * 2, 512));
+      const objectUrl = await getCachedQrObjectUrl(value, Math.max(size * 2, 512));
 
-      if (cancelled) {
-        return;
-      }
-
-      objectUrl = URL.createObjectURL(blob);
+      if (cancelled) return;
       setImageUrl(objectUrl);
     };
 
@@ -37,9 +32,6 @@ const BasicQrPreview = ({
 
     return () => {
       cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
     };
   }, [size, value]);
 
