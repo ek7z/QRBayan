@@ -16,28 +16,26 @@ const AppRoutes = () => {
       {/* Public Routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route element={<DashboardLayout />}>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/utility-qr" element={<UtilityQrPage />} />
 
-      {/* Protected Dashboard Routes */}
-      <Route element={<ProtectedRoute />}>
-        <Route element={<DashboardLayout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
+        {/* Protected Dashboard Routes */}
+        <Route element={<ProtectedRoute />}>
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/buy-credits" element={<BuyCreditsPage />} />
-          <Route path="/utility-qr" element={<UtilityQrPage />} />
           <Route path="/tasks" element={<TaskPage />} />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Route>
-      </Route>
 
-      {/* Admin Routes */}
-      <Route element={<ProtectedRoute adminOnly={true} />}>
-        <Route element={<DashboardLayout />}>
+        {/* Admin Routes */}
+        <Route element={<ProtectedRoute adminOnly={true} />}>
           <Route path="/admin" element={<AdminPanel />} />
         </Route>
       </Route>
 
       {/* 404 Redirect */}
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 };

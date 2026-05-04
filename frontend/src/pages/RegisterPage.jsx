@@ -190,6 +190,15 @@ const RegisterPage = () => {
               Sign in
             </Link>
           </p>
+          <p className="mt-3 text-center text-sm text-slate-400">
+            Need a quick QR without an account?{" "}
+            <Link
+              to="/utility-qr"
+              className="text-emerald-400 hover:text-emerald-300 font-medium"
+            >
+              Open Utility QR
+            </Link>
+          </p>
         </div>
       </div>
     </div>

@@ -2,19 +2,22 @@ import { Link, useNavigate, Outlet, useLocation } from "react-router-dom";
 import useAuthStore from "../store/useAuthStore";
 import {
   LogOut,
+  LogIn,
   LayoutDashboard,
   History,
   CreditCard,
   ShieldCheck,
   Link2,
   Gift,
+  Lock,
   Menu,
   X,
+  UserPlus,
 } from "lucide-react";
 import { useState } from "react";
 
 const DashboardLayout = () => {
-  const { user, logout } = useAuthStore();
+  const { user, logout, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -25,15 +28,20 @@ const DashboardLayout = () => {
   };
 
   const navItems = [
-    { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-    { label: "Utility QR", path: "/utility-qr", icon: Link2 },
-    { label: "Free Tasks", path: "/tasks", icon: Gift },
-    { label: "History", path: "/history", icon: History },
-    { label: "Buy Credits", path: "/buy-credits", icon: CreditCard },
+    { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, requiresAuth: false },
+    { label: "Utility QR", path: "/utility-qr", icon: Link2, requiresAuth: false },
+    { label: "Free Tasks", path: "/tasks", icon: Gift, requiresAuth: true },
+    { label: "History", path: "/history", icon: History, requiresAuth: true },
+    { label: "Buy Credits", path: "/buy-credits", icon: CreditCard, requiresAuth: true },
   ];
 
   if (user?.role === "admin") {
-    navItems.push({ label: "Admin Panel", path: "/admin", icon: ShieldCheck });
+    navItems.push({
+      label: "Admin Panel",
+      path: "/admin",
+      icon: ShieldCheck,
+      requiresAuth: true,
+    });
   }
 
   return (
@@ -58,6 +66,7 @@ const DashboardLayout = () => {
           </p>
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
+            const isLocked = item.requiresAuth && !isAuthenticated;
             return (
               <Link
                 key={item.path}
@@ -71,31 +80,60 @@ const DashboardLayout = () => {
                 <item.icon
                   className={`w-4 h-4 ${isActive ? "text-blue-400" : "text-slate-500"}`}
                 />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {isLocked && <Lock className="h-3.5 w-3.5 text-amber-300" />}
               </Link>
             );
           })}
         </nav>
 
         <div className="border-t border-slate-800/60 p-4">
-          <div className="flex items-center gap-3 px-2 mb-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-sm font-semibold text-white">
-              {user?.email?.[0]?.toUpperCase()}
+          {isAuthenticated ? (
+            <>
+              <div className="flex items-center gap-3 px-2 mb-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-sm font-semibold text-white">
+                  {user?.email?.[0]?.toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">
+                    {user?.email?.split("@")[0]}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-2 rounded-2xl px-3 py-3 text-sm text-slate-400 transition-colors hover:bg-slate-800/70 hover:text-red-400"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign out
+              </button>
+            </>
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                <p className="text-sm font-medium text-white">Guest mode</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Explore the dashboard first, then sign in to unlock generation,
+                  credits, history, and free tasks.
+                </p>
+              </div>
+              <Link
+                to="/login"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-3 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+              >
+                <LogIn className="h-4 w-4" />
+                Sign in
+              </Link>
+              <Link
+                to="/register"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 px-3 py-3 text-sm text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
+              >
+                <UserPlus className="h-4 w-4" />
+                Create account
+              </Link>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
-                {user?.email?.split("@")[0]}
-              </p>
-              <p className="text-xs text-slate-500 truncate">{user?.email}</p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex w-full items-center gap-2 rounded-2xl px-3 py-3 text-sm text-slate-400 transition-colors hover:bg-slate-800/70 hover:text-red-400"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign out
-          </button>
+          )}
         </div>
       </aside>
 
@@ -126,6 +164,7 @@ const DashboardLayout = () => {
           <div className="px-4 pb-4 border-t border-slate-800/50">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
+              const isLocked = item.requiresAuth && !isAuthenticated;
               return (
                 <Link
                   key={item.path}
@@ -138,17 +177,39 @@ const DashboardLayout = () => {
                   }`}
                 >
                   <item.icon className="w-4 h-4" />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {isLocked && <Lock className="h-3.5 w-3.5 text-amber-300" />}
                 </Link>
               );
             })}
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-3 py-2.5 text-sm text-red-400 mt-2 w-full"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign out
-            </button>
+            {isAuthenticated ? (
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-3 px-3 py-2.5 text-sm text-red-400 mt-2 w-full"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign out
+              </button>
+            ) : (
+              <div className="mt-3 grid gap-2">
+                <Link
+                  to="/login"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-medium text-white"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Sign in
+                </Link>
+                <Link
+                  to="/register"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-300"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Create account
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import useAuthStore from "../store/useAuthStore";
 import { LogIn, Loader2, AlertCircle, Mail, Lock } from "lucide-react";
@@ -17,6 +17,8 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const setAuth = useAuthStore((state) => state.setAuth);
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectTo = location.state?.from || "/dashboard";
 
   const {
     register,
@@ -33,7 +35,7 @@ const LoginPage = () => {
       const response = await api.post("/auth/login", data);
       const { user, token } = response.data.data;
       setAuth(user, token);
-      navigate("/dashboard");
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(
         err.response?.data?.message ||
@@ -142,6 +144,15 @@ const LoginPage = () => {
               className="text-blue-400 hover:text-blue-300 font-medium"
             >
               Register
+            </Link>
+          </p>
+          <p className="mt-3 text-center text-sm text-slate-400">
+            Want to generate a utility QR without logging in?{" "}
+            <Link
+              to="/utility-qr"
+              className="text-emerald-400 hover:text-emerald-300 font-medium"
+            >
+              Open Utility QR
             </Link>
           </p>
         </div>

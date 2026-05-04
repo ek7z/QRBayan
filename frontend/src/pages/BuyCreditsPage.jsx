@@ -200,12 +200,44 @@ const BuyCreditsPage = () => {
                     2. Submit payment details
                   </h2>
                   <p className="text-sm text-slate-400">
-                    Add the reference number and upload your payment screenshot.
+                    Scan the payment QR, send the exact amount, then add your
+                    reference number and upload your screenshot.
                   </p>
                 </div>
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-5">
+                  <div className="rounded-3xl border border-slate-800 bg-slate-950/50 p-5">
+                    <p className="text-sm font-medium text-slate-300">
+                      Scan this payment QR
+                    </p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Use this QR to send your payment for the selected credit
+                      package.
+                    </p>
+
+                    <div className="mt-5 overflow-hidden rounded-3xl border border-slate-800 bg-white p-4">
+                      <img
+                        src="/payment.png"
+                        alt="Payment QR"
+                        className="mx-auto h-auto w-full max-w-xs object-contain"
+                      />
+                    </div>
+
+                    <div className="mt-5 rounded-2xl border border-indigo-500/20 bg-indigo-500/10 px-4 py-3 text-sm text-indigo-100">
+                      <p className="font-medium text-white">Amount to send</p>
+                      <p className="mt-1 text-2xl font-bold">
+                        PHP {selectedPackage.price}
+                      </p>
+                      <p className="mt-2 text-xs text-indigo-100/80">
+                        After sending, copy the reference number from your
+                        wallet or bank app and submit it below.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-5">
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-300">
@@ -239,15 +271,15 @@ const BuyCreditsPage = () => {
                           <div className="mb-4 rounded-2xl bg-slate-800 p-4 text-slate-400">
                             <ImageIcon className="h-8 w-8" />
                           </div>
-                          <p className="font-medium text-white">
-                            Upload payment screenshot
-                          </p>
-                          <p className="mt-1 text-sm text-slate-500">
-                            PNG or JPG format
-                          </p>
-                        </>
-                      )}
-                      <input
+                        <p className="font-medium text-white">
+                          Upload payment screenshot
+                        </p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          PNG or JPG format after you complete the payment
+                        </p>
+                      </>
+                    )}
+                    <input
                         type="file"
                         ref={fileInputRef}
                         onChange={handleFileChange}
@@ -258,7 +290,7 @@ const BuyCreditsPage = () => {
                   </div>
                 </div>
 
-                <div className="flex flex-col justify-between gap-5">
+                <div className="flex flex-col justify-between gap-5 md:col-span-2">
                   <div className="rounded-3xl border border-slate-800 bg-slate-950/50 p-5">
                     <p className="text-sm font-medium text-slate-300">
                       Order summary
@@ -381,7 +413,7 @@ const BuyCreditsPage = () => {
             </div>
             <div className="space-y-3 text-sm">
               <p>1. Select a credit package.</p>
-              <p>2. Send your payment.</p>
+              <p>2. Scan the payment QR and send the exact amount.</p>
               <p>3. Upload the screenshot and reference number.</p>
               <p>4. Wait for admin approval before credits are added.</p>
             </div>

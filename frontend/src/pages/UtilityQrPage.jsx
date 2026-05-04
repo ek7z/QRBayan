@@ -276,7 +276,7 @@ const UtilityQrPage = () => {
           <h1 className="text-3xl font-bold text-white">Create QR codes for everyday use</h1>
           <p className="mt-2 text-sm text-slate-400">
             Generate QR codes for links, Wi-Fi access, contact cards, and social profiles.
-            Everything on this page is free to use. The paid credit-based flow only applies to the main dashboard QR customizer.
+            Everything on this page is free to use.
           </p>
         </div>
       </div>
