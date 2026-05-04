@@ -1696,18 +1696,14 @@ const DashboardPage = () => {
                   <h3 className="text-sm font-semibold text-white">Text styling</h3>
                 </div>
                 <div className="space-y-4">
-                  <label className="block">
-                    <span className="mb-1 block text-xs text-slate-400">Display text</span>
-                    <input
-                      type="text"
-                      value={customName}
-                      onChange={(event) =>
-                        setCustomName(event.target.value.toUpperCase())
-                      }
-                      maxLength={25}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500"
-                    />
-                  </label>
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100">
+                    <p className="font-medium text-amber-300">Name update note</p>
+                    <p className="mt-1 leading-5 text-amber-100/90">
+                      This step only styles the visible label on the frame. To change
+                      the actual encoded display name in the QR, go back to Step 2
+                      and generate again.
+                    </p>
+                  </div>
 
                   <label className="block">
                     <span className="mb-1 block text-xs text-slate-400">Font</span>
