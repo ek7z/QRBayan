@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { QRCodeCanvas } from "qrcode.react";
 import {
   Download,
   Globe,
@@ -13,6 +12,8 @@ import {
   Wifi,
 } from "lucide-react";
 import { useToast } from "../components/ToastProvider";
+import BasicQrPreview from "../components/BasicQrPreview";
+import { downloadQrImage } from "../utils/qrImage";
 
 const qrTypes = [
   {
@@ -248,17 +249,20 @@ const UtilityQrPage = () => {
     });
   };
 
-  const downloadQr = () => {
-    const canvas = document.getElementById("utility-qr-canvas");
-    if (!canvas) return;
-
-    const url = canvas.toDataURL("image/png");
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `UTILITY_QR_${selectedType.toUpperCase()}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadQr = async () => {
+    try {
+      await downloadQrImage(
+        generatedPayload,
+        `UTILITY_QR_${selectedType.toUpperCase()}.png`,
+        1024,
+      );
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Download failed",
+        message: "Could not export this QR code. Please try again.",
+      });
+    }
   };
 
   return (
@@ -514,12 +518,10 @@ const UtilityQrPage = () => {
           {generatedPayload ? (
             <div className="space-y-5">
               <div className="flex justify-center rounded-3xl border border-slate-800 bg-slate-950/60 p-5">
-                <QRCodeCanvas
-                  id="utility-qr-canvas"
+                <BasicQrPreview
                   value={generatedPayload}
                   size={260}
-                  level="H"
-                  includeMargin={true}
+                  alt="Utility QR code"
                 />
               </div>
 

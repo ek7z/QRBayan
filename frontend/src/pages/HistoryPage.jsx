@@ -8,7 +8,7 @@ import {
   History as HistoryIcon,
   AlertCircle,
 } from "lucide-react";
-import { QRCodeCanvas } from "qrcode.react";
+import { downloadQrImage } from "../utils/qrImage";
 
 const HistoryPage = () => {
   const [history, setHistory] = useState([]);
@@ -31,24 +31,16 @@ const HistoryPage = () => {
     }
   };
 
-  const downloadQR = (payload, name) => {
-    const canvas = document.createElement("canvas");
-    // We need to render the QR to a hidden canvas first
-    // But since qrcode.react is a component, we'll use a simpler approach:
-    // Finding the canvas by a temporary ID or just using a utility.
-    // For now, I'll just use a hidden canvas in the row.
-    const rowCanvas = document.getElementById(
-      `qr-canvas-${payload.substring(0, 10)}`,
-    );
-    if (!rowCanvas) return;
-
-    const url = rowCanvas.toDataURL("image/png");
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `QRPH_${name.replace(/\s+/g, "_")}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadQR = async (payload, name) => {
+    try {
+      await downloadQrImage(
+        payload,
+        `QRPH_${name.replace(/\s+/g, "_")}.png`,
+        1024,
+      );
+    } catch (error) {
+      setError("Failed to download this QR image.");
+    }
   };
 
   const filteredHistory = history.filter((item) =>
@@ -161,15 +153,6 @@ const HistoryPage = () => {
                       Download
                     </button>
 
-                    <div className="hidden">
-                      <QRCodeCanvas
-                        id={`qr-canvas-${item.modified_payload.substring(0, 10)}`}
-                        value={item.modified_payload}
-                        size={1024}
-                        level="H"
-                        includeMargin={true}
-                      />
-                    </div>
                   </div>
                 </div>
               </div>
