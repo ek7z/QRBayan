@@ -1,0 +1,33 @@
+# dependencies
+frontend/node_modules/
+backend/node_modules/
+
+# builds
+frontend/dist/
+backend/dist/
+build/
+
+# env files
+.env
+.env.*
+frontend/.env
+frontend/.env.*
+backend/.env
+backend/.env.*
+backend/.env.development
+backend/.env.production
+
+# uploads
+backend/uploads/
+
+# logs
+*.log
+frontend/dev-server.log
+frontend/dev-server.err.log
+backend/dev-server.log
+backend/dev-server.err.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
